@@ -1,0 +1,14 @@
+jenkins:
+  image: xgox/jenkins:1
+  deploy:
+    mode: replicated
+    replicas: 1
+    restart_policy:
+      condition: on-failure
+    placement:
+      constraints: [node.labels.DevOpsTools == true]
+  ports:
+    - "8080:8080"
+    - "50000:50000"
+  volumes:
+    - /home/jenkins:/var/jenkins_home

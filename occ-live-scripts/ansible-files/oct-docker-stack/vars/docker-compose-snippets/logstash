@@ -1,0 +1,21 @@
+logstash:
+  image: xgox/logstash:1
+  deploy:
+    mode: replicated
+    replicas: 1
+    restart_policy:
+      condition: on-failure
+    placement:
+      constraints: [node.labels.ELK == true]
+  volumes:
+    - /home/logstash/config/logstash.yml:/usr/share/logstash/config/logstash.yml:ro
+    - /home/logstash/pipeline:/usr/share/logstash/pipeline:ro
+  ports:
+    - "5000:5000"
+    - "9600:9600"
+  environment:
+    LS_JAVA_OPTS: "-Xmx256m -Xms256m"
+  networks:
+    - elk
+  depends_on:
+    - elasticsearch

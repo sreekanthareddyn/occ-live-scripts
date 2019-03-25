@@ -1,0 +1,12 @@
+gerrit:
+  image: xgox/gerrit:1
+  deploy:
+    mode: replicated
+    replicas: 1
+    restart_policy:
+      condition: on-failure
+    placement:
+      constraints: [node.labels.DevOpsTools == true]
+  ports:
+    - "8083:8080"
+    - "29418:29418"

@@ -1,0 +1,82 @@
+---
+# vars file for oct-docker-stack
+
+jenkins_dockerfiles:
+  jenkins:
+    path: '{{dockerfile_locs}}/jenkins'
+    version: 1
+  jenkins-slave:
+    path: '{{dockerfile_locs}}/jenkins-jnlp-slave'
+    version: 1
+
+dockerfiles:
+  confluence-server:
+    path: '{{dockerfile_locs}}/confluence-server'
+    version: 1
+  docker-registry:
+    path: '{{dockerfile_locs}}/docker-registry/amd64'
+    version: 1
+  elasticsearch:
+    path: '{{dockerfile_locs}}/elasticsearch/6'
+    version: 1
+  gerrit:
+    path: '{{dockerfile_locs}}/gerrit/ubuntu/16'
+    version: 1
+  jenkins:
+    path: '{{dockerfile_locs}}/jenkins'
+    version: 1
+  jenkins-slave:
+    path: '{{dockerfile_locs}}/jenkins-jnlp-slave'
+    version: 1
+  jira-server:
+    path: '{{dockerfile_locs}}/jira-server'
+    version: 1
+  kibana:
+    path: '{{dockerfile_locs}}/kibana/6'
+    version: 1
+  logstash:
+    path: '{{dockerfile_locs}}/logstash/6'
+    version: 1
+  nexus3:
+    path: '{{dockerfile_locs}}/nexus3'
+    version: 1
+  nexus-iq-server:
+    path: '{{dockerfile_locs}}/nexus-iq-server'
+    version: 1
+  nginx:
+    path: '{{dockerfile_locs}}/nginx/mainline/alpine'
+    version: 1
+  openldap:
+    path: '{{dockerfile_locs}}/openldap'
+    version: 1
+  postgres:
+    path: '{{dockerfile_locs}}/postgres/11'
+    version: 1
+  sensu:
+    path: '{{dockerfile_locs}}/sensu'
+    version: 1
+  sonarqube:
+    path: '{{dockerfile_locs}}/sonarqube/7.5-community'
+    version: 1
+  vault:
+    path: '{{dockerfile_locs}}/vault/0.X'
+    version: 1
+
+jenkins_url: http://127.0.0.1:8080
+
+jenkins_slaves:
+  jenkins-slave-1:
+    ipv4_addr: 172.22.0.3
+    jenkins_secret_file: /home/jenkins/jenkins_home/secrets/jenkins-slave-1.txt
+  jenkins-slave-2:
+    ipv4_addr: 172.22.0.4
+    jenkins_secret_file: /home/jenkins/jenkins_home/secrets/jenkins-slave-2.txt
+
+# Swarm Services
+service_list:
+  - confluence
+  - registry
+  - elasticsearch
+  - gerrit
+  - jenkins
+  - jira

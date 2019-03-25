@@ -1,0 +1,19 @@
+jenkins-slave:
+  image: xgox/jenkins-slave:1
+  build:
+
+  deploy:
+    mode: replicated
+    replicas: 2
+    restart_policy:
+      condition: on-failure
+    placement:
+      constraints: [node.labels.DevOpsTools == true]
+  working_dir: /home/jenkins/agent
+  environment:
+    - JENKINS_URL: http://localhost:8080
+    - JENKINS_TUNNEL: 0.0.0.0:8080
+    - JENKINS_SECRET: ${jenkins_secret}
+    - JENKINS_AGENT_NAME: jenkins
+  depends_on:
+    - jenkins

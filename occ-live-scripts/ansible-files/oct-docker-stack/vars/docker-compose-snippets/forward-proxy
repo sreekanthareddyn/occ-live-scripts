@@ -1,0 +1,11 @@
+forward-proxy:
+  image: xgox/nginx:1
+  deploy:
+    mode: replicated
+    replicas: 1
+    restart_policy:
+      condition: on-failure
+    placement:
+      constraints: [node.labels.ForwardProxy == true]
+  ports:
+    - "8080:80"

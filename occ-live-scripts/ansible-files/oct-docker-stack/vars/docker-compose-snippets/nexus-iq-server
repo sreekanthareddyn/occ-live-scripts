@@ -1,0 +1,14 @@
+nexus-iq-server:
+  image: xgox/nexus-iq-server:1
+  deploy:
+    mode: replicated
+    replicas: 1
+    restart_policy:
+      condition: on-failure
+    placement:
+      constraints: [node.labels.DevOpsTools == true]
+  volumes:
+    - /home/sonatype-work:/sonatype-work
+  ports:
+    - "8070:8070"
+    - "8071:8071"

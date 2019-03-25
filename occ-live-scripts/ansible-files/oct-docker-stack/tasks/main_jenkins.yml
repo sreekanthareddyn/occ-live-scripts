@@ -1,0 +1,97 @@
+---
+# tasks file for oct-docker-stack
+
+- name: Check images
+  shell: docker images | awk '{print $1,$2}'
+  register: image_list
+
+- name: Check running docker containers
+  shell: docker images | awk '{print $1,$2}'
+  register: container_list
+
+- name: Create docker_images
+  shell: docker image build {{ item.value.path }} -t xgox/{{ item.key }}:{{ item.value.version }}
+  with_dict: "{{ jenkins_dockerfiles }}"
+  when:
+    - jenkins_dockerfiles is defined
+    - image_list.stdout.find('xgox/{{ item.key }} {{ item.value.version }}') == -1
+
+- name: Create Jenkins bridge network
+  docker_network:
+    name: jenkins_net
+    ipam_options:
+      subnet: '172.22.0.0/16'
+      gateway: 172.22.0.1
+      iprange: '172.22.0.0/24'
+
+- name: Set jenkins volume permissions
+  file:
+    path: /home/jenkins/
+    state: directory
+    mode: 0777
+
+- name: Set jenkins_home volume permissions
+  file:
+    path: /home/jenkins/jenkins_home
+    state: directory
+    mode: 0777
+
+- name: Set jenkin logs volume permissions
+  file:
+    path: /home/jenkins/logs
+    state: directory
+    mode: 0777
+
+- name: Create a Jenkins container
+  docker_container:
+    name: jenkins
+    image: xgox/jenkins:1
+    pull: no
+    state: started
+    ports:
+      - "8080:8080"
+      - "50000:50000"
+    volumes:
+      - /home/jenkins/jenkins_home:/var/jenkins_home
+      - /home/jenkins/logs:/var/log/jenkins
+    networks:
+      - name: jenkins_net
+        ipv4_address: "172.22.0.2"
+
+- name: Wait until the port 8080(Jenkins) is open
+  wait_for:
+    port: 8080
+    host: 127.0.0.1
+    delay: 30
+    timeout: 120
+
+- name: Create nodes on jenkins
+  shell: curl -L -s -o /dev/null -v -k -w "%{http_code}" -u "{{ jenkins_user }}:{{ jenkins_password }}" -H "Content-Type:application/x-www-form-urlencoded" -X POST -d "json={{ lookup('file', '{{ item.key }}-object.json') }}" "{{ jenkins_url }}/computer/doCreateItem?name={{ item.key }}&type=hudson.slaves.DumbSlave"
+  with_dict: "{{ jenkins_slaves }}"
+  when:
+    - container_list.stdout.find('{{ item.key }}') == -1
+
+- name: Get slave secrets
+  shell: curl -XGET -u "{{ jenkins_user }}:{{ jenkins_password }}" {{ jenkins_url }}/computer/{{ item.key }}/slave-agent.jnlp | sed "s/.*<application-desc main-class=\"hudson.remoting.jnlp.Main\"><argument>\([a-z0-9]*\).*/\1/" > /home/jenkins/jenkins_home/secrets/{{ item.key }}.txt
+  with_dict: "{{ jenkins_slaves }}"
+  when:
+    - container_list.stdout.find('{{ item.key }}') == -1
+
+- name: Create a Jenkins Slave container
+  docker_container:
+    name: "{{ item.key }}"
+    image: xgox/jenkins-slave:1
+    pull: no
+    state: started
+    working_dir: /home/jenkins/agent
+    env:
+      JENKINS_URL: http://172.22.0.2:8080
+      JENKINS_TUNNEL: 172.22.0.2:50000
+      JENKINS_SECRET: "{{ lookup('file', '{{ item.value.jenkins_secret_file}}') }}"
+      JENKINS_AGENT_NAME: "{{ item.key }}"
+    networks:
+      - name: jenkins_net
+        ipv4_address: "{{ item.value.ipv4_addr }}"
+        links:
+          - jenkins
+  with_dict: "{{ jenkins_slaves }}"

@@ -1,0 +1,14 @@
+confluence:
+  image: xgox/confluence-server:1
+  deploy:
+    mode: replicated
+    replicas: 1
+    restart_policy:
+      condition: on-failure
+    placement:
+      constraints: [node.labels.DevOpsTools == true]
+  volumes:
+    - /home/confluence:/var/atlassian/application-data/confluence
+  ports:
+    - "8090:8090"
+    - "8091:8091"

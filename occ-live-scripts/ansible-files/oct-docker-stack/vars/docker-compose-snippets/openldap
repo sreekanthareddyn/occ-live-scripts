@@ -1,0 +1,17 @@
+openldap:
+  image: xgox/openldap:1
+  deploy:
+    mode: replicated
+    replicas: 1
+    restart_policy:
+      condition: on-failure
+    placement:
+      constraints: [node.labels.OpenLDAP == true]
+  ports:
+    - "389:389"
+  volumes:
+    - /home/ldap/config:/etc/ldap
+    - /home/ldap/data:/var/lib/ldap
+  environment:
+    SLAPD_PASSWORD: "mysecretpassword"
+    SLAPD_DOMAIN: "ldap.example.org"

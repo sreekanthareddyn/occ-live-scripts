@@ -1,0 +1,20 @@
+sudo: required
+
+language: bash
+
+services:
+  - docker
+
+env:
+  - VERSION=6.7.6-community
+  - VERSION=7.5-community
+
+script:
+  - v="${VERSION}"
+  - cd "$v"
+  - docker build -t "sonarqube-$v" .
+  - docker images
+  - ../run-tests.sh "$v"
+
+notifications:
+  email: false

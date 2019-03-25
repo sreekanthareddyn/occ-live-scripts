@@ -1,0 +1,10 @@
+sensu:
+  image: xgox/sensu:1
+  deploy:
+    mode: replicated
+    replicas: 1
+    restart_policy:
+      condition: on-failure
+    placement:
+      constraints: [node.labels.Sensu == true]
+  command: server

@@ -1,0 +1,14 @@
+vault:
+  image: xgox/vault:1
+  deploy:
+    mode: replicated
+    replicas: 1
+    restart_policy:
+      condition: on-failure
+    placement:
+      constraints: [node.labels.DevOpsTools == true]
+  cap_add:
+    - IPC_LOCK
+  environment:
+    VAULT_DEV_ROOT_TOKEN_ID: myroot
+    VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:1234

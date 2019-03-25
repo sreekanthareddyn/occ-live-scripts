@@ -1,0 +1,11 @@
+postgres-docker:
+  image: xgox/postgres:1
+  deploy:
+    mode: replicated
+    replicas:
+    restart_policy:
+      condition: on-failure
+    placement:
+      constraints: [node.labels.PostgresDocker == true]
+  environment:
+    POSTGRES_PASSWORD: "mysecretpassword"

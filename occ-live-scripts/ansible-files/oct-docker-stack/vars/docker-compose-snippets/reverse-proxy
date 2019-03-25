@@ -1,0 +1,13 @@
+reverse-proxy:
+  image: xgox/nginx:1
+  deploy:
+    mode: replicated
+    replicas: 1
+    restart_policy:
+      condition: on-failure
+    placement:
+      constraints: [node.labels.ReverseProxy == true]
+  volumes:
+    - /home/nginx/nginx.conf.d:/etc/nginx/conf.d:ro
+  ports:
+    - "8080:80"

@@ -1,0 +1,28 @@
+---
+# tasks file for oct-docker-stack
+
+- hosts: localhost
+  become: yes
+  become_method: sudo
+  become_user: root
+  roles:
+    - docker
+  vars_files:
+    - vars/main.yml
+    - vars/secrets.yml
+  tasks:
+    - name: Install epel repo
+      yum:
+        name: https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
+        state: present
+
+    - name: Install pip
+      yum:
+        name: python-pip
+        state: present
+
+    - name: Install docker-py
+      pip:
+        name: docker-py
+
+    - include_tasks: tasks/main.yml

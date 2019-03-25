@@ -1,0 +1,11 @@
+postgres-jira:
+  image: xgox/postgres:1
+  deploy:
+    mode: replicated
+    replicas: 1
+    restart_policy:
+      condition: on-failure
+    placement:
+      constraints: [node.labels.PostgresJira == true]
+  environment:
+    POSTGRES_PASSWORD: "mysecretpassword"

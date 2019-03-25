@@ -1,0 +1,424 @@
+---
+# tasks file for oct-docker-stack
+
+- name: Check images
+  shell: docker images | awk '{print $1,$2}'
+  register: image_list
+
+- name: Check running docker containers
+  shell: docker ps
+  register: container_list
+
+- name: Populate jenkins admin usernames/passwords
+  template:
+    src: init_user.groovy.j2
+    dest: "{{ dockerfiles.jenkins.path }}/init_user.groovy"
+    mode: 0777
+
+- name: Create docker_images
+  shell: docker image build {{ item.value.path }} -t xgox/{{ item.key }}:{{ item.value.version }}
+  with_dict: "{{ dockerfiles }}"
+  when:
+    - dockerfiles is defined
+    - image_list.stdout.find('xgox/{{ item.key }} {{ item.value.version }}') == -1
+
+- name: Create ELK stack bridge network
+  docker_network:
+    name: elk
+    ipam_options:
+      subnet: '172.18.0.0/16'
+      gateway: 172.18.0.1
+      iprange: '172.18.0.0/24'
+
+- name: Create Jenkins bridge network
+  docker_network:
+    name: jenkins_net
+    ipam_options:
+      subnet: '172.22.0.0/16'
+      gateway: 172.22.0.1
+      iprange: '172.22.0.0/24'
+
+- name: Set Elasticsearch volume permissions
+  file:
+    path: /home/elasticsearch
+    state: directory
+    owner: root
+    group: root
+    mode: 0664
+
+- name: Set Logstash volume permissions
+  file:
+    path: /home/logstash
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+
+- name: Set Elasticsearch volume permissions
+  file:
+    path: /home/kibana
+    state: directory
+    owner: root
+    group: root
+    mode: 0664
+
+- name: Set Elasticsearch volume permissions
+  file:
+    path: /home/elasticsearch/config
+    state: directory
+    mode: 0664
+
+- name: Set Logstash volume permissions
+  file:
+    path: "/home/logstash/{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+  with_items:
+    - config
+    - pipeline
+
+- name: Set Kibana volume permissions
+  file:
+    path: /home/kibana/config
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+
+- name: Copy Elasticsearch env variable file
+  copy:
+    src: config/elasticsearch/elasticsearch.yml
+    dest: /home/elasticsearch/config/elasticsearch.yml
+    mode: 0664
+
+- name: Copy Logstash env variable file
+  copy:
+    src: config/logstash/logstash.yml
+    dest: /home/logstash/config/logstash.yml
+    mode: 0755
+
+- name: Copy Logstash pipeline var file
+  copy:
+    src: config/logstash/pipelines.yml
+    dest: /home/logstash/config/pipelines.yml
+    mode: 0755
+
+- name: Copy Logstash pipeline config
+  copy:
+    src: config/logstash/logstash.conf
+    dest: /home/logstash/pipeline/logstash.conf
+    mode: 0755
+
+- name: Copy Kibana env variable file
+  copy:
+    src: config/kibana/kibana.yml
+    dest: /home/kibana/config/kibana.yml
+    mode: 0755
+
+- name: Create a Confluence container
+  docker_container:
+    name: confluence
+    image: xgox/confluence-server:1
+    pull: no
+    state: started
+    detach: yes
+    ports:
+      - "8090:8090"
+      - "8091:8091"
+    volumes:
+      - /home/confluence:/var/atlassian/application-data/confluence
+
+- name: Create a Docker Registry container
+  docker_container:
+    name: registry
+    image: xgox/docker-registry:1
+    pull: no
+    state: started
+    restart: yes
+    detach: yes
+    ports:
+      - "5000:5000"
+
+- name: Create a Elasticsearch container
+  docker_container:
+    name: elasticsearch
+    image: xgox/elasticsearch:1
+    pull: no
+    state: started
+    detach: yes
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    volumes:
+      - /home/elasticsearch/config/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml:rw
+    env:
+      ES_JAVA_OPTS: "-Xmx256m -Xms256m"
+    networks:
+      - name: elk
+        ipv4_address: "172.18.0.2"
+
+- name: Create a Gerrit container
+  docker_container:
+    name: gerrit
+    image: xgox/gerrit:1
+    pull: no
+    state: started
+    tty: yes
+    interactive: yes
+    ports:
+      - "8083:8080"
+      - "29418:29418"
+
+- name: Set jenkins volume permissions
+  file:
+    path: /home/jenkins/
+    state: directory
+    mode: 0777
+
+- name: Set jenkins_home volume permissions
+  file:
+    path: /home/jenkins/jenkins_home
+    state: directory
+    mode: 0777
+
+- name: Set jenkin logs volume permissions
+  file:
+    path: /home/jenkins/logs
+    state: directory
+    mode: 0777
+
+- name: Create a Jenkins container
+  docker_container:
+    name: jenkins
+    image: xgox/jenkins:1
+    pull: no
+    state: started
+    ports:
+      - "8080:8080"
+      - "50000:50000"
+    volumes:
+      - /home/jenkins/jenkins_home:/var/jenkins_home
+      - /home/jenkins/logs:/var/log/jenkins
+    networks:
+      - name: jenkins_net
+        ipv4_address: "172.22.0.2"
+
+- name: Wait until Jenkins is ready
+  uri:
+    url: http://127.0.0.1:8080/
+  register: result
+  retries: 60
+  delay: 2
+  until: result.status == 200
+
+- name: Create nodes on jenkins
+  shell: curl -L -s -o /dev/null -v -k -w "%{http_code}" -u "{{ jenkins_user }}:{{ jenkins_pass }}" -H "Content-Type:application/x-www-form-urlencoded" -X POST -d "json={{ lookup('file', '{{ item.key }}-object.json') }}" "{{ jenkins_url }}/computer/doCreateItem?name={{ item.key }}&type=hudson.slaves.DumbSlave"
+  with_dict: "{{ jenkins_slaves }}"
+  when:
+    - container_list.stdout.find('{{ item.key }}') == -1
+
+- name: Get slave secrets
+  shell: curl -XGET -u "{{ jenkins_user }}:{{ jenkins_pass }}" {{ jenkins_url }}/computer/{{ item.key }}/slave-agent.jnlp | sed "s/.*<application-desc main-class=\"hudson.remoting.jnlp.Main\"><argument>\([a-z0-9]*\).*/\1/" > /home/jenkins/jenkins_home/secrets/{{ item.key }}.txt
+  with_dict: "{{ jenkins_slaves }}"
+  when:
+    - container_list.stdout.find('{{ item.key }}') == -1
+
+- name: Create a Jenkins Slave container
+  docker_container:
+    name: "{{ item.key }}"
+    image: xgox/jenkins-slave:1
+    pull: no
+    state: started
+    working_dir: /home/jenkins/agent
+    env:
+      JENKINS_URL: http://172.22.0.2:8080
+      JENKINS_TUNNEL: 172.22.0.2:50000
+      JENKINS_SECRET: "{{ lookup('file', '{{ item.value.jenkins_secret_file}}') }}"
+      JENKINS_AGENT_NAME: "{{ item.key }}"
+      JENKINS_USERNAME: "{{ jenkins_user }}"
+      JENKINS_PASSWORD: " {{ jenkins_pass }} "
+    networks:
+      - name: jenkins_net
+        ipv4_address: "{{ item.value.ipv4_addr }}"
+        links:
+          - jenkins
+  with_dict: "{{ jenkins_slaves }}"
+
+- name: Create a Jira container
+  docker_container:
+    name: jira
+    image: xgox/jira-server:1
+    pull: no
+    state: started
+    detach: yes
+    ports:
+      - "8082:8080"
+
+- name: Create a Kibana container
+  docker_container:
+    name: kibana
+    image: xgox/kibana:1
+    pull: no
+    state: started
+    detach: yes
+    ports:
+      - "5601:5601"
+    volumes:
+      - /home/kibana/config/:/usr/share/kibana/config/:rw
+    networks:
+      - name: elk
+        ipv4_address: "172.18.0.3"
+        links:
+          - elasticsearch
+
+- name: Create a Logstash container
+  docker_container:
+    name: logstash
+    image: xgox/logstash:1
+    pull: no
+    state: started
+    tty: yes
+    interactive: yes
+    ports:
+      - "5044:5044"
+      - "9600:9600"
+    volumes:
+      - /home/logstash/config:/usr/share/logstash/config:rw
+      - /home/logstash/pipeline:/usr/share/logstash/pipeline:rw
+    env:
+      LS_JAVA_OPTS: "-Xmx512m -Xms256m"
+    networks:
+      - name: elk
+        ipv4_address: "172.18.0.4"
+        links:
+          - elasticsearch
+
+- name: Create a Nexus container
+  docker_container:
+    name: nexus
+    image: xgox/nexus3:1
+    pull: no
+    state: started
+    detach: yes
+    ports:
+      - "8081:8081"
+
+- name: Set sonatype_work volume permissions
+  file:
+    path: /home/sonatype-work
+    state: directory
+    mode: 0766
+    recurse: yes
+
+- name: Create a Nexus IQ Server container
+  docker_container:
+    name: nexus-iq-server
+    image: xgox/nexus-iq-server:1
+    pull: no
+    state: started
+    detach: yes
+    ports:
+      - "8070:8070"
+      - "8071:8071"
+    volumes:
+      - /home/sonatype-work:/sonatype-work
+
+#Simple nginx container with custom configuration
+- name: Create a Nginx container
+  docker_container:
+    name: nginx
+    image: xgox/nginx:1
+    pull: no
+    state: started
+    detach: yes
+    ports:
+      - "8085:80"
+
+- name: Create Nginx config directory
+  file:
+    path: /home/nginx/nginx.conf.d/
+    state: directory
+    mode: 0666
+    recurse: yes
+
+- name: Create Nginx config
+  copy:
+    src: default.conf
+    dest: /home/nginx/nginx.conf.d/default.conf
+    mode: 0666
+
+- name: Create a Reverse proxy Nginx container
+  docker_container:
+    name: reverse_proxy
+    image: xgox/nginx:1
+    pull: no
+    state: started
+    detach: yes
+    ports:
+      - "8086:80"
+    volumes:
+      - /home/nginx/nginx.conf.d/:/etc/nginx/conf.d/:ro
+
+- name: Create a OpenLDAP container
+  docker_container:
+    name: openldap
+    image: xgox/openldap:1
+    pull: no
+    state: started
+    detach: yes
+    ports:
+      - "389:389"
+    volumes:
+      - /home/ldap/config:/etc/ldap
+      - /home/ldap/data:/var/lib/ldap
+    env:
+      SLAPD_PASSWORD: "{{ openldap_pass }}"
+      SLAPD_DOMAIN: "ldap.example.org"
+
+- name: Create a Postgres container
+  docker_container:
+    name: postgres
+    image: xgox/postgres:1
+    pull: no
+    state: started
+    detach: yes
+    tty: yes
+    interactive: yes
+    env:
+      POSTGRES_PASSWORD: "{{ postgres_pass }}"
+
+- name: Create a Sensu container
+  docker_container:
+    name: sensu
+    image: xgox/sensu:1
+    pull: no
+    state: started
+    detach: yes
+    tty: yes
+    interactive: yes
+    command: server
+
+- name: Create a Sonarqube container
+  docker_container:
+    name: sonarqube
+    image: xgox/sonarqube:1
+    pull: no
+    state: started
+    detach: yes
+    ports:
+      - "9000:9000"
+
+- name: Create a Vault container
+  docker_container:
+    name: vault
+    image: xgox/vault:1
+    pull: no
+    state: started
+    detach: yes
+    capabilities:
+      - IPC_LOCK
+    env:
+      VAULT_DEV_ROOT_TOKEN_ID: myroot
+      VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:1234

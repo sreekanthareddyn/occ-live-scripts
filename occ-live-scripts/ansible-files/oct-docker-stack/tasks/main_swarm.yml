@@ -1,0 +1,83 @@
+---
+# tasks file for oct-docker-stack
+- name: Create docker_images
+  shell: docker image build {{ item.value.path }} -t xgox/{{ item.key }}:{{ item.value.version }}
+  with_dict: "{{ raw_dockerfile_locs }}"
+  when: raw_dockerfile_locs is defined
+
+- name: Set jenkins_home volume permissions
+  file:
+    path: /home/jenkins
+    state: directory
+    mode: 0777
+
+- name: Set sonatype_work volume permissions
+  file:
+    path: /home/sonatype-work
+    state: directory
+    mode: 0766
+    recurse: yes
+
+- name: Create nginx config directory
+  file:
+    path: /home/nginx/nginx.conf.d/
+    state: directory
+    mode: 0666
+    recurse: yes
+
+- name: Copy nginx config
+  copy:
+    src: default.conf
+    dest: /home/nginx/nginx.conf.d/default.conf
+    mode: 0666
+
+- name: Set elasticsearch volume permissions
+  file:
+    path: /home/elasticsearch/config
+    state: directory
+    mode: 0666
+
+- name: Copy elasticsearch env variable failure
+  copy:
+    src: config/elasticsearch/elasticsearch.yml
+    dest: /home/elasticsearch/config/elasticsearch.yml
+    mode: 0666
+
+- name: Set logstash volume permissions
+  file:
+    path: "/home/logstash/{{ item }}"
+    state: directory
+    mode: 0666
+  with_items:
+    - config
+    - pipeline
+
+- name: Copy logstash env variable
+  copy:
+    src: config/logstash/logstash.yml
+    dest: /home/logstash/config/logstash.yml
+    mode: 0666
+
+- name: Copy logstash pipeline config
+  copy:
+    src: config/logstash/logstash.conf
+    dest: /home/logstash/pipeline/logstash.conf
+    mode: 0666
+
+- name: Set kibana volume permissions
+  file:
+    path: /home/kibana/config
+    state: directory
+    mode: 0666
+
+- name: Copy logstash env variable
+  copy:
+    src: config/kibana/kibana.yml
+    dest: /home/kibana/config/kibana.yml
+    mode: 0666
+
+- name: create compose file from template
+  template:
+    src: docker-compose.yml.j2
+    dest: ./files/docker-compose.yml
+    mode: 0666
